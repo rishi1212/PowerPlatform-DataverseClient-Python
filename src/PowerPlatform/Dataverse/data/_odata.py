@@ -742,6 +742,8 @@ class _ODataClient(_FileUploadMixin, _RelationshipOperationsMixin):
         top: Optional[int] = None,
         expand: Optional[List[str]] = None,
         page_size: Optional[int] = None,
+        count: bool = False,
+        include_annotations: Optional[str] = None,
     ) -> Iterable[List[Dict[str, Any]]]:
         """Iterate records from an entity set, yielding one page (list of dicts) at a time.
 
@@ -759,16 +761,25 @@ class _ODataClient(_FileUploadMixin, _RelationshipOperationsMixin):
         :type expand: ``list[str]`` | ``None``
         :param page_size: Per-page size hint via ``Prefer: odata.maxpagesize``.
         :type page_size: ``int`` | ``None``
+        :param count: If ``True``, adds ``$count=true`` to include a total record count in the response.
+        :type count: ``bool``
+        :param include_annotations: OData annotation pattern for the ``Prefer: odata.include-annotations`` header (e.g. ``"*"`` or ``"OData.Community.Display.V1.FormattedValue"``), or ``None``.
+        :type include_annotations: ``str`` | ``None``
 
         :return: Iterator yielding pages (each page is a ``list`` of record dicts).
         :rtype: ``Iterable[list[dict[str, Any]]]``
         """
 
         extra_headers: Dict[str, str] = {}
+        prefer_parts: List[str] = []
         if page_size is not None:
             ps = int(page_size)
             if ps > 0:
-                extra_headers["Prefer"] = f"odata.maxpagesize={ps}"
+                prefer_parts.append(f"odata.maxpagesize={ps}")
+        if include_annotations:
+            prefer_parts.append(f'odata.include-annotations="{include_annotations}"')
+        if prefer_parts:
+            extra_headers["Prefer"] = ",".join(prefer_parts)
 
         def _do_request(url: str, *, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
             headers = extra_headers if extra_headers else None
@@ -795,6 +806,8 @@ class _ODataClient(_FileUploadMixin, _RelationshipOperationsMixin):
             params["$expand"] = ",".join(expand)
         if top is not None:
             params["$top"] = int(top)
+        if count:
+            params["$count"] = "true"
 
         data = _do_request(base_url, params=params)
         items = data.get("value") if isinstance(data, dict) else None

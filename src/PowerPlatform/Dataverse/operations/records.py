@@ -270,6 +270,8 @@ class RecordOperations:
         top: Optional[int] = None,
         expand: Optional[List[str]] = None,
         page_size: Optional[int] = None,
+        count: bool = False,
+        include_annotations: Optional[str] = None,
     ) -> Iterable[List[Record]]:
         """Fetch multiple records from a Dataverse table with pagination.
 
@@ -300,6 +302,13 @@ class RecordOperations:
         :param page_size: Optional per-page size hint sent via
             ``Prefer: odata.maxpagesize``.
         :type page_size: :class:`int` or None
+        :param count: If ``True``, adds ``$count=true`` to include a total
+            record count in the response.
+        :type count: :class:`bool`
+        :param include_annotations: OData annotation pattern for the
+            ``Prefer: odata.include-annotations`` header (e.g. ``"*"`` or
+            ``"OData.Community.Display.V1.FormattedValue"``), or ``None``.
+        :type include_annotations: :class:`str` or None
 
         :return: Generator yielding pages, where each page is a list of
             :class:`~PowerPlatform.Dataverse.models.record.Record` objects.
@@ -330,6 +339,8 @@ class RecordOperations:
         top: Optional[int] = None,
         expand: Optional[List[str]] = None,
         page_size: Optional[int] = None,
+        count: bool = False,
+        include_annotations: Optional[str] = None,
     ) -> Union[Record, Iterable[List[Record]]]:
         """Fetch a single record by ID, or fetch multiple records with pagination.
 
@@ -375,6 +386,14 @@ class RecordOperations:
         :param page_size: Optional per-page size hint sent via
             ``Prefer: odata.maxpagesize``. Only used for multi-record queries.
         :type page_size: :class:`int` or None
+        :param count: If ``True``, adds ``$count=true`` to include a total
+            record count in the response. Only used for multi-record queries.
+        :type count: :class:`bool`
+        :param include_annotations: OData annotation pattern for the
+            ``Prefer: odata.include-annotations`` header (e.g. ``"*"`` or
+            ``"OData.Community.Display.V1.FormattedValue"``), or ``None``.
+            Only used for multi-record queries.
+        :type include_annotations: :class:`str` or None
 
         :return: A single record dict when ``record_id`` is provided, or a
             generator yielding pages (lists of record dicts) when fetching
@@ -413,10 +432,13 @@ class RecordOperations:
                 or top is not None
                 or expand is not None
                 or page_size is not None
+                or count is not False
+                or include_annotations is not None
             ):
                 raise ValueError(
                     "Cannot specify query parameters (filter, orderby, top, "
-                    "expand, page_size) when fetching a single record by ID"
+                    "expand, page_size, count, include_annotations) when "
+                    "fetching a single record by ID"
                 )
             with self._client._scoped_odata() as od:
                 raw = od._get(table, record_id, select=select)
@@ -432,6 +454,8 @@ class RecordOperations:
                     top=top,
                     expand=expand,
                     page_size=page_size,
+                    count=count,
+                    include_annotations=include_annotations,
                 ):
                     yield [Record.from_api_response(table, row) for row in page]
 
