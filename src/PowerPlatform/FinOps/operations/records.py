@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any, Iterator, Mapping, Optional, Sequence, Union
 from urllib.parse import quote
 
 from ..errors import FinOpsError
@@ -121,8 +121,100 @@ class RecordOperations:
         return resp.json()
 
     # ------------------------------------------------------------------ #
-    # UPDATE                                                             #
+    # LIST (paginated)                                                   #
     # ------------------------------------------------------------------ #
+    def list(
+        self,
+        entity_set: str,
+        *,
+        filter: Optional[str] = None,
+        select: Optional[Sequence[str]] = None,
+        expand: Optional[Sequence[str]] = None,
+        orderby: Optional[Union[str, Sequence[str]]] = None,
+        top: Optional[int] = None,
+        page_size: Optional[int] = None,
+        cross_company: bool = False,
+    ) -> Iterator[dict]:
+        """``GET /data/{entity_set}`` — yield rows lazily across all pages.
+
+        Transparently follows the ``@odata.nextLink`` continuation token
+        emitted by FinOps OData and yields one row dict at a time. Stops
+        after ``top`` rows when given (server is told via ``$top``; client
+        also caps just in case the server ignores it).
+
+        Parameters
+        ----------
+        entity_set:
+            FinOps OData entity set name (e.g. ``"CustomersV3"``).
+        filter:
+            Raw OData ``$filter`` expression. Callers are responsible for
+            quoting; the SDK will not try to parse it. A typed query builder
+            is on the roadmap (see ``FinOps-SDK-Plan.docx`` §8 Phase 2).
+        select:
+            Column names for ``$select``.
+        expand:
+            Navigation properties for ``$expand``.
+        orderby:
+            Either a single OData ordering clause (``"CreatedDateTime desc"``)
+            or a list of them.
+        top:
+            Hard cap on rows. Sent server-side as ``$top`` and enforced
+            client-side as a defensive stop.
+        page_size:
+            Optional ``Prefer: odata.maxpagesize=N`` hint to ask the server
+            for smaller pages — useful when the dataset is large and the
+            caller is paging memory-sensitively.
+        cross_company:
+            When ``True``, sends the FinOps-specific ``cross-company=true``
+            query parameter so rows from every legal entity (``dataAreaId``)
+            are returned. Default is ``False``, which mirrors the FinOps
+            OData default of scoping to the caller's default company.
+
+        Yields
+        ------
+        dict
+            One OData row at a time.
+        """
+        params: dict = {}
+        if cross_company:
+            params["cross-company"] = "true"
+        if filter:
+            params["$filter"] = filter
+        if select:
+            params["$select"] = ",".join(select)
+        if expand:
+            params["$expand"] = ",".join(expand)
+        if orderby:
+            params["$orderby"] = orderby if isinstance(orderby, str) else ",".join(orderby)
+        if top is not None:
+            if top <= 0:
+                return
+            params["$top"] = str(top)
+
+        headers: Optional[dict] = None
+        if page_size is not None:
+            if page_size <= 0:
+                raise ValueError("page_size must be positive")
+            headers = {"Prefer": f"odata.maxpagesize={int(page_size)}"}
+
+        url: Optional[str] = self._collection_url(entity_set)
+        request_params: Optional[dict] = params or None
+        yielded = 0
+        while url:
+            resp = self._client._http.request(
+                "GET", url, params=request_params, headers=headers, expected=(200,)
+            )
+            payload = resp.json()
+            for row in payload.get("value", []):
+                if top is not None and yielded >= top:
+                    return
+                yield row
+                yielded += 1
+            url = payload.get("@odata.nextLink")
+            # The nextLink already encodes all of the original $-options.
+            request_params = None
+
+
     def update(
         self,
         entity_set: str,

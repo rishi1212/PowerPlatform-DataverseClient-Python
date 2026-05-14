@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional, Type
 
 from ._auth import TokenProvider
 from ._http import HttpClient
-from .operations import RecordOperations
+from .operations import MetadataOperations, RecordOperations
 
 if TYPE_CHECKING:  # pragma: no cover
     from azure.core.credentials import TokenCredential
@@ -65,6 +65,7 @@ class FinOpsClient:
 
         # Operation namespaces.
         self.records = RecordOperations(self)
+        self.metadata = MetadataOperations(self)
 
     # -- accessors ------------------------------------------------------
 
